@@ -23,7 +23,7 @@ export const uploadFile = async (req: Request, res: Response) => {
         'Content-Type': req.file.mimetype,
       });
 
-      const fileUrl = `${process.env.MINIO_PUBLIC_URL}/${BUCKET}/${fileName}`;
+      const fileUrl = `${process.env.MINIO_PUBLIC_URL}/api/v1/media/${fileName}`;
 
       res.status(201).json({ message: 'Files uploaded successfully', url: fileUrl });
     } catch (error) {
@@ -60,7 +60,7 @@ export const uploadMultipleFiles = (req: Request, res: Response): void => {
           { 'Content-Type': file.mimetype }
         );
 
-        const fileUrl = `${process.env.MINIO_PUBLIC_URL}/${BUCKET}/${fileName}`;
+        const fileUrl = `${process.env.MINIO_PUBLIC_URL}/api/v1/media/${fileName}`;
         uploadedUrls.push(fileUrl);
       }
 
@@ -83,4 +83,42 @@ export const getPresignedUrl = async (req: Request, res: Response) => {
     console.error('Presign error:', error);
     res.status(500).json({ message: 'Failed to generate presigned URL' })
   }
+}
+
+// POST /api/v1/media/upload-profile-picture
+export const uploadProfilePicture = async (req: Request, res: Response) => {
+  upload(req, res, async (err) => {
+    if (err) return res.status(400).json({ message: 'File upload error', error: err.message });
+
+    if (!req.file) return res.status(400).json({ message: 'No file provided' });
+
+    // Validate file type
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ message: 'Only image files are allowed' });
+    }
+
+    // Validate file size (5MB limit)
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ message: 'File size too large. Maximum 5MB allowed.' });
+    }
+
+    const fileName = `profile-${uuidv4()}-${req.file.originalname}`;
+
+    try {
+      await minioClient.putObject(BUCKET, fileName, req.file.buffer, req.file.size, {
+        'Content-Type': req.file.mimetype,
+      });
+
+      const fileUrl = `${process.env.MINIO_PUBLIC_URL}/api/v1/media/${fileName}`;
+
+      res.status(201).json({ 
+        message: 'Profile picture uploaded successfully', 
+        url: fileUrl,
+        fileName: fileName
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Upload failed', error });
+    }
+  });
 }

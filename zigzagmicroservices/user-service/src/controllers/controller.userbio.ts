@@ -1,3 +1,4 @@
+
 import { Request, Response } from "express";
 import User from "../models/model.user";
 import UserBio from "../models/model.userbio";
@@ -131,3 +132,95 @@ export const getUserBio = async (
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+// POST /api/v1/user/:id/profile-picture
+export const uploadProfilePicture = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params; // userId from URL
+    const {
+      profilePicture,
+    } = req.body;
+
+    // 1. Check if user exists
+    const user = await User.findByPk(id);
+
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    // 2. Check if Profile Picture already exists (optional but good)
+    const existingProfilePicture = await UserBio.findAll({ where: { userId: id } });
+
+    if (existingProfilePicture) {
+      res.status(400).json({ message: "Profile Picture already exists" });
+      return;
+    }
+
+    // 3. Create UserBio
+    const newProfilePicture = await UserBio.create({
+      userId: Number(id),
+      profilePicture,
+    });
+
+    res
+      .status(201)
+      .json({ message: "Profile Picture created successfully", profilePicture: newProfilePicture });
+  } catch (error) {
+    console.error("Error creating user bio:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+//GET /api/v1/user/:id/profile-picture
+export const getProfilePicture = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { id } = req.params;
+  try {
+  const profilePicture = await UserBio.findAll({ where: { userId: id } });
+  if (!profilePicture) {
+    res.status(404).json({ message: "Profile Picture not found" });
+    return;
+  }
+  res.status(200).json(profilePicture);
+  } catch (error) {
+    console.error("Error fetching profile picture:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// DELETE /api/v1/user/:id/profile-picture
+export const deleteProfilePicture = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Check if user exists
+    const existingUser = await User.findByPk(id);
+    if (!existingUser) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    // Delete user
+    await existingUser.destroy();
+
+    // Delete User Bio
+     const userBio = await UserBio.findOne({
+          where: { userId: Number(existingUser?.id) },
+      });
+    
+    //Delete userbio if available
+    userBio?.destroy();
+
+    res.status(200).json({ message: 'Profile Picture deleted successfully' });
+  } catch (error) {
+    console.error('Failed to delete profile picture:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+

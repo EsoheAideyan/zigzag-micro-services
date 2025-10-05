@@ -2,10 +2,13 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { Request, Response } from 'express'
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import User from '../models/model.user'
 import UserBio from "../models/model.userbio";
+import multer from 'multer';
+import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 
 
 const JWT_SECRET_ACCESS_TOKEN = process.env.JWT_SECRET_ACCESS_TOKEN;
@@ -178,6 +181,104 @@ export const updateUserInfo = async (req: Request, res: Response): Promise<void>
     res.status(200).json({ message: 'User updated successfully', user });
   } catch (error) {
     console.error('Failed to update user:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Configure multer for profile picture uploads
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req: any, file: any, cb: any) => {
+    // Accept only image files
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'), false);
+    }
+  }
+});
+
+// POST /api/v1/user/:id/profile-picture
+export const uploadProfilePicture = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = Number(id);
+
+    // Check if user exists
+    const user = await User.findByPk(userId);
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    // Check if file was uploaded
+    if (!req.file) {
+      res.status(400).json({ message: 'No profile picture file provided' });
+      return;
+    }
+
+    // Prepare file data for media service
+    const fileName = `profile-${userId}-${uuidv4()}.jpg`;
+    const fileBuffer = req.file.buffer;
+    const fileSize = req.file.size;
+    const contentType = req.file.mimetype;
+
+    // Upload to media service
+    const mediaServiceUrl = process.env.MEDIA_SERVICE_URL || 'http://media-service:3032';
+    
+    try {
+      // Create form data for media service
+      const formData = new FormData();
+      formData.append('file', new Blob([fileBuffer], { type: contentType }), fileName);
+
+      const mediaResponse = await axios.post(`${mediaServiceUrl}/api/v1/media/upload-media`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000, // 30 second timeout
+      });
+
+      if (mediaResponse.status !== 201) {
+        throw new Error('Media service upload failed');
+      }
+
+      const imageUrl = mediaResponse.data.url;
+
+      // Update or create user bio with profile picture
+      let userBio = await UserBio.findOne({ where: { userId } });
+      
+      if (userBio) {
+        // Update existing bio
+        const currentPictures = userBio.profilePicture || [];
+        userBio.profilePicture = [...currentPictures, imageUrl];
+        await userBio.save();
+      } else {
+        // Create new bio with profile picture
+        userBio = await UserBio.create({
+          userId,
+          profilePicture: [imageUrl],
+        });
+      }
+
+      res.status(200).json({ 
+        message: 'Profile picture uploaded successfully',
+        profilePictureUrl: imageUrl,
+        userBio: userBio
+      });
+
+    } catch (mediaError) {
+      console.error('Media service error:', mediaError);
+      res.status(500).json({ 
+        message: 'Failed to upload to media service',
+        error: mediaError instanceof Error ? mediaError.message : 'Unknown error'
+      });
+    }
+
+  } catch (error) {
+    console.error('Profile picture upload error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

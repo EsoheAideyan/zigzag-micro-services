@@ -1,11 +1,11 @@
 
 import { RequestHandler } from "express";
 
-export const requireInternalKey: RequestHandler = (req, res, next): void => {
-  const key = req.header("x-internal-key");
-  if (!key || key !== process.env.INTERNAL_GATEWAY_KEY) {
-    res.status(403).json({ message: "Forbidden" });
-    return; // <-- end the function, but do NOT return the Response
+export const requireUserContext: RequestHandler = (req, res, next): void => {
+  const userId = req.header("x-user-id");
+  if (!userId) {
+    res.status(401).json({ message: "User context required" });
+    return;
   }
   next();
 };

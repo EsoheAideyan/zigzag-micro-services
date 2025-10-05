@@ -40,26 +40,74 @@ services:
       timeout: 5s
       retries: 5
 
-  # user-service:
-  #   build: ./zigzagmicroservices/user-service
-  #   container_name: user_service
-  #   depends_on:
-  #     - postgres
+  user-service:
+    build: ./zigzagmicroservices/user-service
+    container_name: user_service
+    ports:
+      - "3030:3030"
+    environment:
+      - DOCKER=true
+      - DB_HOST_DOCKER=postgres
+      - DB_HOST_LOCAL=localhost
+      - DB_NAME=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=zigzag
+      - JWT_SECRET_ACCESS_TOKEN=zigzag
+      - JWT_SECRET_REFRESH_TOKEN=zigzag
+    depends_on:
+      - postgres
 
-  # event-service:
-  #   build: ./zigzagmicroservices/events-service
-  #   container_name: events_service
-  #   depends_on:
-  #     - postgres
+  event-service:
+    build: ./zigzagmicroservices/events-service
+    container_name: events_service
+    ports:
+      - "3031:3031"
+    environment:
+      - DOCKER=true
+      - DB_HOST_DOCKER=postgres
+      - DB_HOST_LOCAL=localhost
+      - DB_NAME=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=zigzag
+    depends_on:
+      - postgres
 
-  # media-service:
-  #   build: ./zigzagmicroservices/media-service
-  #   container_name: media_service
-  #   ports:
-  #     - "3032:3032"
-  #   depends_on:
-  #     minio:
-  #       condition: service_healthy   
+  media-service:
+    build: ./zigzagmicroservices/media-service
+    container_name: media_service
+    ports:
+      - "3032:3032"
+    environment:
+      - DOCKER=true
+      - DB_HOST_DOCKER=postgres
+      - DB_HOST_LOCAL=localhost
+      - DB_NAME=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=zigzag
+      - MINIO_PUBLIC_URL=http://localhost:9000
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=media-bucket
+    depends_on:
+      minio:
+        condition: service_healthy   
+
+  api-gateway:
+    build: ./zigzagmicroservices/api-gateway
+    container_name: api_gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - DOCKER=true
+      - USER_SERVICE_URL=http://user-service:3030
+      - EVENT_SERVICE_URL=http://event-service:3031
+      - MEDIA_SERVICE_URL=http://media-service:3032
+    depends_on:
+      - user-service
+      - event-service
+      - media-service
 
 volumes:   # <-- move this to root level
   pgdata:
