@@ -1,0 +1,16 @@
+{
+  "name": "zigzag-micro-services",
+  "private": true,
+  "scripts": {
+    "dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "dev:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down",
+    "up": "docker compose up -d --build",
+    "down": "docker compose down",
+    "db:create": "docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm user-service npm run db:create:docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm events-service npm run db:create:docker",
+    "db:migrate": "docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm user-service npm run db:migrate && docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm events-service npm run db:migrate",
+    "db:setup": "npm run db:create && npm run db:migrate",
+    "db:create:prod": "docker compose run --rm user-service npm run db:create:docker && docker compose run --rm events-service npm run db:create:docker",
+    "db:migrate:prod": "docker compose run --rm user-service npm run db:migrate && docker compose run --rm events-service npm run db:migrate",
+    "db:setup:prod": "npm run db:create:prod && npm run db:migrate:prod"
+  }
+}

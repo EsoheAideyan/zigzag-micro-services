@@ -24,6 +24,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Root: simple health / info (so https://api.thezigzagapp.com/ doesn't 404)
+app.get("/", (_req, res) => {
+  res.json({ ok: true, service: "zigzag-api-gateway", version: "1.0", basePath: "/api/v1" });
+});
+
 // Proxy /api/v1/user
 app.use(
   "/api/v1/user",

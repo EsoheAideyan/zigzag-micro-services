@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:15
     container_name: postgres_db
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -9,28 +10,35 @@ services:
       POSTGRES_PASSWORD: zigzag
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     image: dpage/pgadmin4
     container_name: pgadmin
+    restart: unless-stopped
     ports:
       - "5050:80"
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@local.com
       PGADMIN_DEFAULT_PASSWORD: admin
     depends_on:
-      - postgres    
+      postgres:
+        condition: service_healthy
 
-  ### ➡️ Add MinIO (Storage)
   minio:
     image: minio/minio:latest
     container_name: minio
+    restart: unless-stopped
     ports:
-      - "9000:9000"   # MinIO API
-      - "9001:9001"   # MinIO Console
+      - "9000:9000"
+      - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin     # Username (change if needed)
-      MINIO_ROOT_PASSWORD: minioadmin # Password (change if needed)
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
     volumes:
       - minio_data:/data
     command: server --console-address ":9001" /data
@@ -40,27 +48,114 @@ services:
       timeout: 5s
       retries: 5
 
-  # user-service:
-  #   build: ./zigzagmicroservices/user-service
-  #   container_name: user_service
-  #   depends_on:
-  #     - postgres
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-zigzag}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-zigzag}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # event-service:
-  #   build: ./zigzagmicroservices/events-service
-  #   container_name: events_service
-  #   depends_on:
-  #     - postgres
+  user-service:
+    build: ./zigzagmicroservices/user-service
+    container_name: user_service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DOCKER: "true"
+      PORT: 3030
+      DB_NAME: users_db
+      DB_USER: postgres
+      DB_PASSWORD: zigzag
+      DB_PORT: 5432
+      DB_HOST_DOCKER: postgres
+      JWT_SECRET_ACCESS_TOKEN: ${JWT_SECRET_ACCESS_TOKEN:-zigzag}
+      JWT_SECRET_REFRESH_TOKEN: ${JWT_SECRET_REFRESH_TOKEN:-zigzag}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
-  # media-service:
-  #   build: ./zigzagmicroservices/media-service
-  #   container_name: media_service
-  #   ports:
-  #     - "3032:3032"
-  #   depends_on:
-  #     minio:
-  #       condition: service_healthy   
+  events-service:
+    build: ./zigzagmicroservices/events-service
+    container_name: events_service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DOCKER: "true"
+      PORT: 3031
+      DB_NAME: events_db
+      DB_USER: postgres
+      DB_PASSWORD: zigzag
+      DB_PORT: 5432
+      DB_HOST_DOCKER: postgres
+      USER_SERVICE_URL: http://user-service:3030
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-zigzag}:${RABBITMQ_PASSWORD:-zigzag}@rabbitmq:5672
+      INTERNAL_GATEWAY_KEY: ${INTERNAL_GATEWAY_KEY:-zigzag}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
-volumes:   # <-- move this to root level
+  media-service:
+    build: ./zigzagmicroservices/media-service
+    container_name: media_service
+    restart: unless-stopped
+    ports:
+      - "3032:3032"
+    environment:
+      NODE_ENV: production
+      DOCKER: "true"
+      PORT: 3032
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: media-bucket
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:9000}
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  notification-service:
+    build: ./zigzagmicroservices/notification-service
+    container_name: notification_service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-zigzag}:${RABBITMQ_PASSWORD:-zigzag}@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  api-gateway:
+    build: ./zigzagmicroservices/api-gateway
+    container_name: api_gateway
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      USER_SERVICE_URL: http://user-service:3030/api/v1/user
+      EVENT_SERVICE_URL: http://events-service:3031/api/v1/events
+      MEDIA_SERVICE_URL: http://media-service:3032/api/v1/media
+      JWT_SECRET_ACCESS_TOKEN: ${JWT_SECRET_ACCESS_TOKEN:-zigzag}
+      JWT_SECRET_REFRESH_TOKEN: ${JWT_SECRET_REFRESH_TOKEN:-zigzag}
+      INTERNAL_GATEWAY_KEY: ${INTERNAL_GATEWAY_KEY:-zigzag}
+    depends_on:
+      - user-service
+      - events-service
+      - media-service
+
+volumes:
   pgdata:
   minio_data:

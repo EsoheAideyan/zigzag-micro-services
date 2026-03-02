@@ -10,6 +10,4 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-EXPOSE 3032
-
 CMD ["npm", "start"]
