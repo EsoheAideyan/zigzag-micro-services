@@ -7,8 +7,8 @@ import { requireUserContext } from "../middlewares/requireUserContext";
 const router = express.Router();
 
 // Root route - GET returns all events, POST creates a new event
-//router.get("/", getAllEvents);
-//router.post("/", createEvent);
+router.get("/", getAllEvents);
+router.post("/", createEvent);
 
 // Legacy endpoint (still supported)
 router.post("/createEvent", createEvent);

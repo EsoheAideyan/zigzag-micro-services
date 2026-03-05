@@ -1,0 +1,17 @@
+# Env files with secrets (use .env.example as template)
+.env
+.env.production
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

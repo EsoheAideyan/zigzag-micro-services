@@ -1,20 +1,15 @@
-# Use Node.js 18 base image
-FROM node:18
+# Production: build and run compiled JS
+FROM node:18-alpine
 
-# Set working directory inside container
 WORKDIR /app
 
-# Copy only package.json and package-lock.json
+# NODE_ENV is set by docker-compose (production) or docker-compose.dev.yml (development)
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the app files
 COPY . .
+RUN npm run build
 
-# Expose your service port (optional for internal use)
 EXPOSE 3031
 
-# Run the application
-CMD ["npm", "run", "dev"]
+CMD ["npm", "start"]

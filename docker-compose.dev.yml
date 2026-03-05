@@ -1,0 +1,53 @@
+# Local development overrides only. Merged with docker-compose.yml — you get
+# postgres, minio, rabbitmq, pgadmin from the main file; this file only overrides
+# the Node app services (command, NODE_ENV, volumes for hot reload).
+# Run: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Production: docker compose up (omit the -f docker-compose.dev.yml).
+
+services:
+  user-service:
+    command: ["npm", "run", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./zigzagmicroservices/user-service:/app
+      - user_service_node_modules:/app/node_modules
+
+  events-service:
+    command: ["npm", "run", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./zigzagmicroservices/events-service:/app
+      - events_service_node_modules:/app/node_modules
+
+  media-service:
+    command: ["npm", "run", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./zigzagmicroservices/media-service:/app
+      - media_service_node_modules:/app/node_modules
+
+  notification-service:
+    command: ["npm", "run", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./zigzagmicroservices/notification-service:/app
+      - notification_service_node_modules:/app/node_modules
+
+  api-gateway:
+    command: ["npm", "run", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./zigzagmicroservices/api-gateway:/app
+      - api_gateway_node_modules:/app/node_modules
+
+volumes:
+  user_service_node_modules:
+  events_service_node_modules:
+  media_service_node_modules:
+  notification_service_node_modules:
+  api_gateway_node_modules:

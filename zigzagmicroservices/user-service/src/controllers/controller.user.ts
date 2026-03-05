@@ -4,6 +4,7 @@ dotenv.config();
 import { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { Op } from 'sequelize'
 import User from '../models/model.user'
 import UserBio from "../models/model.userbio";
 import multer from 'multer';
@@ -185,100 +186,68 @@ export const updateUserInfo = async (req: Request, res: Response): Promise<void>
   }
 };
 
-// Configure multer for profile picture uploads
-const upload = multer({ 
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-  fileFilter: (req: any, file: any, cb: any) => {
-    // Accept only image files
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'), false);
-    }
-  }
-});
-
-// POST /api/v1/user/:id/profile-picture
-export const uploadProfilePicture = async (req: Request, res: Response): Promise<void> => {
+// GET /api/v1/user/discover/all
+// Fetches all users except the currently logged-in user, including their bio information
+export const getAllUsersExceptCurrent = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const userId = Number(id);
-
-    // Check if user exists
-    const user = await User.findByPk(userId);
-    if (!user) {
-      res.status(404).json({ message: 'User not found' });
-      return;
-    }
-
-    // Check if file was uploaded
-    if (!req.file) {
-      res.status(400).json({ message: 'No profile picture file provided' });
-      return;
-    }
-
-    // Prepare file data for media service
-    const fileName = `profile-${userId}-${uuidv4()}.jpg`;
-    const fileBuffer = req.file.buffer;
-    const fileSize = req.file.size;
-    const contentType = req.file.mimetype;
-
-    // Upload to media service
-    const mediaServiceUrl = process.env.MEDIA_SERVICE_URL || 'http://media-service:3032';
+    // Get current user ID from JWT token (set by auth middleware) or from headers (set by API gateway)
+    const currentUserId = (req as any).user?.userId || req.headers['x-user-id'];
     
-    try {
-      // Create form data for media service
-      const formData = new FormData();
-      formData.append('file', new Blob([fileBuffer], { type: contentType }), fileName);
-
-      const mediaResponse = await axios.post(`${mediaServiceUrl}/api/v1/media/upload-media`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 30000, // 30 second timeout
-      });
-
-      if (mediaResponse.status !== 201) {
-        throw new Error('Media service upload failed');
-      }
-
-      const imageUrl = mediaResponse.data.url;
-
-      // Update or create user bio with profile picture
-      let userBio = await UserBio.findOne({ where: { userId } });
-      
-      if (userBio) {
-        // Update existing bio
-        const currentPictures = userBio.profilePicture || [];
-        userBio.profilePicture = [...currentPictures, imageUrl];
-        await userBio.save();
-      } else {
-        // Create new bio with profile picture
-        userBio = await UserBio.create({
-          userId,
-          profilePicture: [imageUrl],
-        });
-      }
-
-      res.status(200).json({ 
-        message: 'Profile picture uploaded successfully',
-        profilePictureUrl: imageUrl,
-        userBio: userBio
-      });
-
-    } catch (mediaError) {
-      console.error('Media service error:', mediaError);
-      res.status(500).json({ 
-        message: 'Failed to upload to media service',
-        error: mediaError instanceof Error ? mediaError.message : 'Unknown error'
-      });
+    if (!currentUserId) {
+      res.status(401).json({ message: 'User not authenticated' });
+      return;
     }
 
+    // Fetch all users except the current user, including their bio
+    const users = await User.findAll({
+      where: {
+        id: {
+          [Op.ne]: Number(currentUserId)
+        }
+      },
+      include: [{
+        model: UserBio,
+        as: 'bio',
+        required: false // LEFT JOIN - include users even if they don't have a bio
+      }],
+      attributes: {
+        exclude: ['password'] // Don't return password
+      },
+      order: [['createdAt', 'DESC']] // Order by newest first
+    });
+
+    // Format the response to combine user and bio information
+    const formattedUsers = users.map(user => {
+      const userData = user.toJSON() as any; // Type assertion for included bio
+      const bioData = userData.bio;
+      return {
+        id: userData.id,
+        name: userData.name,
+        username: userData.username,
+        email: userData.email,
+        accountType: userData.accountType,
+        createdAt: userData.createdAt,
+        bio: bioData ? {
+          birthday: bioData.showBirthday ? bioData.birthday : null,
+          pronouns: bioData.showPronouns ? bioData.pronouns : null,
+          userVibe: bioData.userVibe,
+          othersVibe: bioData.othersVibe,
+          eventInterests: bioData.eventInterests,
+          availability: bioData.availability,
+          purpose: bioData.purpose,
+          bio: bioData.bio,
+          profilePicture: bioData.profilePicture
+        } : null
+      };
+    });
+
+    res.status(200).json({
+      message: 'Users fetched successfully',
+      count: formattedUsers.length,
+      users: formattedUsers
+    });
   } catch (error) {
-    console.error('Profile picture upload error:', error);
+    console.error('Failed to fetch users:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
